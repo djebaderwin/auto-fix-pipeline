@@ -1,0 +1,35 @@
+---
+name: DB Timeout Simulation - DBTIME1
+on:
+  workflow_dispatch:
+
+jobs:
+  db-timeout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate DB Timeout with Retry
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Executing SQL query..." | tee -a test.log
+          RETRY_COUNT=0
+          MAX_RETRIES=2
+          while true; do
+            if [ $RETRY_COUNT -gt 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [WARNING] Query timed out. Retrying ($RETRY_COUNT/$MAX_RETRIES)..." | tee -a test.log
+            fi
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Query executed successfully." | tee -a test.log
+              break
+            else
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Query execution timed out after 120 seconds" | tee -a test.log
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Query failed after $MAX_RETRIES retries." | tee -a test.log
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 1" | tee -a test.log
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0" | tee -a test.log

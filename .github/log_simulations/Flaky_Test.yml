@@ -1,0 +1,37 @@
+---
+name: Flaky Test Simulation - FLAKY001
+on:
+  workflow_dispatch:
+
+jobs:
+  flaky-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Run Test Suite
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Running test suite: test_login_functionality" | tee -a test.log
+          RETRY_COUNT=0
+          MAX_RETRIES=2
+          while true; do
+            if [ $RETRY_COUNT -gt 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [WARNING] Test failed, retrying ($RETRY_COUNT/$MAX_RETRIES)..." | tee -a test.log
+            fi
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Test passed on attempt $((RETRY_COUNT + 1))" | tee -a test.log
+              break
+            else
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Test 'test_login_functionality' failed" | tee -a test.log
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Test failed after $MAX_RETRIES retries." | tee -a test.log
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 1" | tee -a test.log
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0" | tee -a test.log

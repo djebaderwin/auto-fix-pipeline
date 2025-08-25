@@ -1,0 +1,49 @@
+---
+name: Timeout Failure Simulation
+on:
+  workflow_dispatch:
+
+jobs:
+  timeout-error:
+    name: Timeout Error - TIMEOUT01
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate Timeout with Retry
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Starting long-running operation..." | tee -a test.log
+          RETRY_COUNT=0
+          MAX_RETRIES=2
+          while true; do
+            if [ $RETRY_COUNT -gt 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [WARNING] Operation timed out. Retrying ($RETRY_COUNT/$MAX_RETRIES)..." | | tee -a test.log
+            fi
+            # Simulate operation with 50% chance of success to allow potential success
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Operation completed successfully." | tee -a test.log
+              break
+            else
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Operation timed out after 120 seconds" | tee -a test.log
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Operation failed after $MAX_RETRIES retries." | tee -a test.log
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 1" | tee -a test.log
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0" | tee -a test.log
+
+rules:
+  - match: "npm ERR!"
+    fix: "npm cache clean --force && npm install"
+  - match: "ModuleNotFoundError"
+    fix: "pip install -r requirements.txt"
+  - match: "EADDRINUSE"
+    fix: "killall node"
+  - match: "command not found"
+    fix: "echo 'Install missing CLI tool manually'"
+  - match: "Failed to compile"
+    fix: "Check for syntax errors or missing dependencies"

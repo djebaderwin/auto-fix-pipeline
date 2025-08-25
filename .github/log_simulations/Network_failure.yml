@@ -1,0 +1,35 @@
+---
+name: Network Failure Simulation - NETFAIL1
+on:
+  workflow_dispatch:
+
+jobs:
+  network-failure:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate Network Failure with Retry
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Attempting to connect host api.example.com..." | tee -a test.log
+          RETRY_COUNT=0
+          MAX_RETRIES=2
+          while true; do
+            if [ $RETRY_COUNT -gt 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [WARNING] Network connection failed. Retrying ($RETRY_COUNT/$MAX_RETRIES)..." | tee -a test.log
+            fi
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Connection successful." | tee -a test.log
+              break
+            else
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Unable to resolve hostname: api.example.com" | tee -a test.log
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Network connection failed after $MAX_RETRIES retries." | tee -a test.log
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 2" | tee -a test.log
+                exit 2
+              fi
+              sleep 2
+            fi
+          done
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0" | tee -a test.log

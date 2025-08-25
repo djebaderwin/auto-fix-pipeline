@@ -1,0 +1,137 @@
+rules:
+  - id: AUTH_401
+    description: Invalid credentials used during login
+    type: local_fix
+    patterns:
+      - "Invalid username and password"
+      - "Authentication failed"
+    fix: "Reset credentials or use secret manager token"
+
+  - id: BLD_001
+    description: Syntax error in build.gradle
+    type: local_fix
+    patterns:
+      - "Syntax error in build.gradle"
+    fix: "Validate and fix build.gradle syntax. Run './gradlew build --stacktrace'"
+
+  - id: COMP001
+    description: Compilation error
+    type: local_fix
+    patterns:
+      - "Compilation failed: Unexpected token"
+    fix: "Compilation error - Review code changes and fix syntax errors"
+
+  - id: DBCNX01
+    description: DB Connection Issue
+    type: local_fix
+    patterns:
+      - "Database connection failed after"
+      - "Could not connect to database: connection refused"
+    fix: |
+      echo "restarting PostgreSQL service to resolve connection issues"
+      sudo systemctl restart postgresql || sudo service postgresql restart
+      ping -c 4 db.example.com 
+
+  - id: DBTIME1
+    description:  DB Timeout Issue
+    type: local_fix
+    patterns:
+      - "Query timed out"
+      - "Query execution timed out after"
+    fix: |
+      echo "Identify Slow Query or try increasing database timeout settings"
+      echo "Consider optimizing the query or increasing the timeout or indexing columns"
+      # sudo sed -i 's/statement_timeout = 30s/statement_timeout = 60s/' /etc/postgresql/12/main/postgresql.conf
+      # sudo systemctl restart postgresql || sudo service postgresql restart
+
+  - id: DNS0001
+    description: DNS Resolution Failure
+    type: local_fix
+    patterns:
+      - "DNS lookup failed for service:"
+      - "DNS lookup failed after"
+    fix: |
+      echo "Checking DNS resolution for service"
+      sudo systemctl restart systemd-resolved || sudo service systemd-resolved restart
+      nslookup service.example.com || dig service.example.com
+      cat /etc/resolv.conf
+      echo "If DNS is not resolving, check /etc/resolv.conf or network settings"
+
+  - id: DISK100
+    description: Deployment failed due to service issue
+    type: local_fix
+    patterns:
+      - "No space left on device"
+      - "Fallback: Cleared temporary files to free space"
+    fix: |
+      echo "Checking disk space"
+      df -h
+      echo "Clearing temporary files to free up space"
+      sudo du -sh /tmp/*
+      sudo rm -rf /tmp/*
+      echo "If disk space is still low, consider cleaning up old logs or unused files"
+
+  - id: FILE_404
+    description: File not found 
+    type: local_fix
+    patterns:
+      - "File not found:"
+    fix: |
+      echo "Config file missing. Please check your file path or ensure the file exists before running this step."
+
+  - id: NETFAIL1
+    description: Network Connection Failure
+    type: local_fix
+    patterns:
+      - "Unable to resolve hostname:"
+      - "Network connection failed after"
+    fix: |
+      echo "Checking network connectivity"
+      ping -c 4 api.example.com || curl -I https://api.example.com
+      echo "If network is down, check your network settings or try restarting the network service. Sample commands:" 
+      echo "sudo systemctl restart networking || sudo service networking restart"
+
+  - id: NULL500
+    description: Null Pointer Exception
+    type: local_fix
+    patterns:
+      - "NullPointer Exception"
+      - "Null value encountered"
+    fix: |
+      echo "Review code for null pointer exceptions. Ensure all objects are initialized before use."
+      echo "Consider adding null checks or using Optional to handle potential null values gracefully."
+
+  - id: TIMEOUT01
+    description: Timeout Error
+    type: local_fix
+    patterns:
+      - "Operation timed out after"
+      - "Request timed out"
+    fix: |
+      echo "Suggestion: Increasing timeout settings or checking network connectivity"
+      echo "If the issue persists, check for long-running processes or network latency."
+      echo "Example: export TIMEOUT=300 or check underlying system resource bottlenecks."
+
+  - id: TESTF01
+    description: Test assertion failed due to unexpected result
+    type: suggest
+    patterns:
+      - "AssertionError"
+      - "Expected .* got"
+    fix: |
+      echo "Test assertion failed. Please review the test logic and expectations."
+      echo "Suggestion: Check if test expectations need to be updated or if there's a logic bug in code under test."
+
+    
+  - id: CLSTR01
+    description: Cluster connection failure
+    type: local_fix
+    patterns:
+      - "Cluster connection failed"
+      - "Unable to connect to cluster after"
+      - "Cluster node not reachable"
+    fix: |
+      echo "Checking cluster connectivity"
+      kubectl get nodes || docker ps
+      echo "If cluster is down, check cluster status or restart the cluster service."
+      echo "Example commands: kubectl cluster-info or docker restart <cluster_name>"

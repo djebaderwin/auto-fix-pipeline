@@ -1,0 +1,18 @@
+---
+name: Missing Dependency Simulation - DEP404
+on:
+  workflow_dispatch:
+
+jobs:
+  missing-dependency:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate Missing Dependency
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Loading module 'libcrypto'" | tee -a test.log
+          sleep 1
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Required dependency 'libcrypto' not found" | tee -a test.log
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fallback: Using alternative module" | tee -a test.log
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0" | tee -a test.log
