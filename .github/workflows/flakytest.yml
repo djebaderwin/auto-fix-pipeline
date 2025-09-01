@@ -1,0 +1,66 @@
+name: Flaky Test Example
+on: [push]
+
+jobs:
+  flaky-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Run flaky test
+        id: flaky
+        run: |
+          set +e
+          if [ $((RANDOM % 2)) -eq 0 ]; then
+            # scenarios=("AUTH401","BLD001","CLSTR01","COMP001","DBCNX01","DBTIME1","DISK100","DNS0001","FILE404","FLAKY001","DEP404","NETFAIL1","NULL500","PODFAIL","TESTF01","TIMEOUT01","Timeout01")
+            # RANDOM_SCENARIO=${scenarios[$((RANDOM % ${#scenarios[@]}))]}
+            # echo "2024-06-01T10:00:00Z [ERROR] Test failed with scenario: $RANDOM_SCENARIO" > test.log
+            # "SCENARIO=$RANDOM_SCENARIO"  >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "Test passed!"
+            echo "2024-06-01T10:00:01Z [INFO] Test passed!" > test.log
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+          set -e
+        continue-on-error: true
+
+      - name: Run AutoHeal Plugin
+        id: autoheal
+        if: steps.flaky.outputs.failed == 'true'
+        run: |
+          pip install -e .
+          export PATH="$HOME/.local/bin:$PATH"
+          OUTPUT=$(autoheal-agent --mode suggest test.log)
+          echo $OUTPUT
+          if echo "$OUTPUT" | grep -q "No local fix applied"; then
+            echo "failed=false" >> $GITHUB_OUTPUT
+          else
+            echo "failed=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: send logs to autofix api and apply fix
+        if: steps.autoheal.outputs.failed == 'true'
+        run: |
+          log_content=$(cat test.log)
+          response=$(curl -s -x post "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
+            -h "content-type: application/json" \
+            -d "{\"log\": \"$log_content\"}")
+          echo "autofix api response: $response"
+
+      #- name: Send email notification (on failure)
+      #  if: steps.flaky.outputs.failed == 'true'
+      #  uses: dawidd6/action-send-mail@v3
+      #  with:
+      #    server_address: smtp.gmail.com
+      #    server_port: 465
+      #    username: ${{ secrets.EMAIL_USERNAME }}
+      #    password: ${{ secrets.EMAIL_PASSWORD }}
+      #    subject: "AutoFix Triggered for CI/CD Failure"
+      #    to: ${{ secrets.EMAIL_TO }}
+      #    from: ${{ secrets.EMAIL_USERNAME }}
+      #   body: |
+      #      The CI/CD job failed and AutoFix was triggered.
+      #     Log:
+      #      $(cat test.log)
