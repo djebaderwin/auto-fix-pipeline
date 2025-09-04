@@ -1,15 +1,15 @@
-name: Autofix
+name: Flaky Test Example
 on: [push]
 
 jobs:
-  Auto-fix:
+  flaky-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Run autofix test
-        id: test
+      - name: Run flaky test
+        id: flaky
         run: |
           set +e
           if [ $((RANDOM % 2)) -eq 0 ]; then
@@ -26,7 +26,7 @@ jobs:
 
       - name: Run AutoHeal Plugin
         id: autoheal
-        if: steps.test.outputs.failed == 'true'
+        if: steps.flaky.outputs.failed == 'true'
         run: |
           pip install -e .
           export PATH="$HOME/.local/bin:$PATH"
@@ -41,7 +41,7 @@ jobs:
         # outputs:
         #   failed: ${{ steps.autoheal.outputs.failed }}
       - name: Send logs to Autofix API
-        id: logs
+        id: autofix
         if: steps.autoheal.outputs.failed == 'true'
         run: |
           log_content=$(cat test.log)
@@ -54,7 +54,7 @@ jobs:
 
       - name: Extract Fix
         id: extract
-        if: steps.logs.outputs.response != ''
+        if: steps.autofix.outputs.response != ''
         run: |
           echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Getting json of the fix and converting into actionable script..." | tee -a test.log
           fix_commands=$(echo '${{ steps.autofix.outputs.response }}' | jq -r '.fix_steps[]?')
