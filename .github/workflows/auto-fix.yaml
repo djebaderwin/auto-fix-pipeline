@@ -2,7 +2,7 @@ name: auto-fix
 on: [push]
 
 jobs:
-  flaky-test:
+  autofix-flow:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
