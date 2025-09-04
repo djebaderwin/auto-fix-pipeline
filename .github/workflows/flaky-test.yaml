@@ -37,9 +37,9 @@ jobs:
           else
             echo "failed=false" >> $GITHUB_OUTPUT
           fi
-        shell: bash
-        outputs:
-          failed: ${{ steps.autoheal.outputs.failed }}
+        # shell: bash
+        # outputs:
+        #   failed: ${{ steps.autoheal.outputs.failed }}
       - name: Send logs to Autofix API
         id: autofix
         if: steps.autoheal.outputs.failed == 'true'
