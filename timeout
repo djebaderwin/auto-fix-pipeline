@@ -1,0 +1,93 @@
+name: Timeout Failure Simulation
+on:
+  workflow_dispatch:
+
+jobs:
+  timeout-error:
+    name: Timeout Error - Timeout01
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate Timeout with Retry
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Starting long-running operation..."
+          RETRY_COUNT=0
+          MAX_RETRIES=2
+          while true; do
+            if [ $RETRY_COUNT -gt 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [WARNING] Operation timed out. Retrying ($RETRY_COUNT/$MAX_RETRIES)..."
+            fi
+            # Simulate operation with 50% chance of success to allow potential success
+            if [ $((RANDOM % 2)) -eq 0 ]; then
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Operation completed successfully."
+              break
+            else
+              echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Operation timed out after 120 seconds"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              if [ $RETRY_COUNT -gt $MAX_RETRIES ]; then
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Operation failed after $MAX_RETRIES retries."
+                echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 1"
+                exit 1
+              fi
+              sleep 2
+            fi
+          done
+      - name: Exit with Success
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Exiting with status 0"  
+
+
+ else
+            echo "Test passed!"
+            echo "2024-06-01T10:00:01Z [INFO] Test passed!" > test.log
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+          set -e
+        continue-on-error: true
+
+      - name: Run AutoHeal Plugin
+        id: autoheal
+        if: steps.flaky.outputs.failed == 'true'
+        run: |
+          pip install -e .
+          export PATH="$HOME/.local/bin:$PATH"
+          OUTPUT=$(autoheal-agent --mode suggest test.log)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "No local fix applied"; then
+            echo "failed=false" >> $GITHUB_OUTPUT
+          else
+            echo "failed=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Send logs to Autofix API
+        id: autofix
+        if: steps.autoheal.outputs.failed == 'true'
+        run: |
+          log_content=$(cat test.log)
+          response=$(curl -s -X POST "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
+            -H "Content-Type: application/json" \
+            -d "{\"log\": \"$log_content\"}")
+          echo "autofix api response: $response"
+          # save entire JSON for later steps
+          echo "response=$response" >> $GITHUB_OUTPUT
+
+      - name: Extract Fix
+        id: extract
+        if: steps.autofix.outputs.response != ''
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Getting json of the fix and converting into actionable script..." | tee -a test.log
+          fix_commands=$(echo '${{ steps.autofix.outputs.response }}' | jq -r '.fix_steps[]?')
+          if [ -z "$fix_commands" ]; then
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] No fix steps provided." | tee -a test.log
+            exit 1
+          else
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix steps received: $fix_commands" | tee -a test.log
+            echo "$fix_commands" | sed 's/^/echo Running: & \n&/' > fix.sh
+            chmod +x fix.sh
+          fi
+          
+      - name: Execute Fix
+        if: steps.extract.outcome == 'success'
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Executing fix script..." | tee -a test.log
+          ./fix.sh || { echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Fix script execution failed." | tee -a test.log; exit 1; }
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix script executed successfully." | tee -a test.log
