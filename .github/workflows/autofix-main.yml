@@ -1,0 +1,75 @@
+name: auto-fix
+on: [push]
+
+jobs:
+  flaky-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Run test
+        id: test
+        run: |
+          set +e
+          if [ $((RANDOM % 2)) -eq 0 ]; then
+            echo "2024-06-01T10:00:00Z [ERROR] Test failed randomly" > test.log
+            echo "failed=true" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "Test passed!"
+            echo "2024-06-01T10:00:01Z [INFO] Test passed!" > test.log
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+          set -e
+        continue-on-error: true
+
+      - name: Run AutoHeal Plugin
+        id: autoheal
+        if: steps.test.outputs.failed == 'true'
+        run: |
+          pip install -e .
+          export PATH="$HOME/.local/bin:$PATH"
+          OUTPUT=$(autoheal-agent --mode suggest test.log)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -q "No local fix applied"; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+        # shell: bash
+        # outputs:
+        #   failed: ${{ steps.autoheal.outputs.failed }}
+      - name: Send logs to Autofix API
+        id: autofix
+        if: steps.autoheal.outputs.failed == 'true'
+        run: |
+          log_content=$(cat test.log)
+          response=$(curl -s -X POST "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
+            -H "Content-Type: application/json" \
+            -d "{\"log\": \"$log_content\"}")
+          echo "autofix api response: $response"
+          # save entire JSON for later steps
+          echo "response=$response" >> $GITHUB_OUTPUT
+
+      - name: Extract Fix
+        id: extract
+        if: steps.autofix.outputs.response != ''
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Getting json of the fix and converting into actionable script..." | tee -a test.log
+          fix_commands=$(echo '${{ steps.autofix.outputs.response }}' | jq -r '.fix_steps[]?')
+          if [ -z "$fix_commands" ]; then
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] No fix steps provided." | tee -a test.log
+            exit 1
+          else
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix steps received: $fix_commands" | tee -a test.log
+            echo "$fix_commands" | sed 's/^/echo Running: & \n&/' > fix.sh
+            chmod +x fix.sh
+          fi
+          
+      - name: Execute Fix
+        if: steps.extract.outcome == 'success'
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Executing fix script..." | tee -a test.log
+          ./fix.sh || { echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Fix script execution failed." | tee -a test.log; exit 1; }
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix script executed successfully." | tee -a test.log
