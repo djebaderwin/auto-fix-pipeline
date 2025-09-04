@@ -1,4 +1,4 @@
-name: Flaky Test Example
+name: auto-fix
 on: [push]
 
 jobs:
@@ -8,8 +8,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Run flaky test
-        id: flaky
+      - name: Run test
+        id: test
         run: |
           set +e
           if [ $((RANDOM % 2)) -eq 0 ]; then
@@ -26,7 +26,7 @@ jobs:
 
       - name: Run AutoHeal Plugin
         id: autoheal
-        if: steps.flaky.outputs.failed == 'true'
+        if: steps.test.outputs.failed == 'true'
         run: |
           pip install -e .
           export PATH="$HOME/.local/bin:$PATH"
