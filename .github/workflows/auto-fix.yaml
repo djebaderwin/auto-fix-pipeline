@@ -8,6 +8,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      # Step 1: Run a flaky/random test
       - name: Run test
         id: test
         run: |
@@ -24,6 +25,7 @@ jobs:
           set -e
         continue-on-error: true
 
+      # Step 2: Try local AutoHeal
       - name: Run AutoHeal Plugin
         id: autoheal
         if: steps.test.outputs.failed == 'true'
@@ -32,14 +34,15 @@ jobs:
           export PATH="$HOME/.local/bin:$PATH"
           OUTPUT=$(autoheal-agent --mode suggest test.log)
           echo "$OUTPUT"
+
           if echo "$OUTPUT" | grep -q "No local fix applied"; then
             echo "failed=true" >> $GITHUB_OUTPUT
           else
             echo "failed=false" >> $GITHUB_OUTPUT
           fi
         shell: bash
-        outputs:
-          failed: ${{ steps.autoheal.outputs.failed }}
+
+      # Step 3: Send logs to remote Autofix API if no local fix
       - name: Send logs to Autofix API
         id: autofix
         if: steps.autoheal.outputs.failed == 'true'
@@ -49,15 +52,19 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"log\": \"$log_content\"}")
           echo "autofix api response: $response"
-          # save entire JSON for later steps
-          echo "response=$response" >> $GITHUB_OUTPUT
 
+          # escape JSON for GitHub outputs
+          response_escaped=$(echo "$response" | jq -c . | sed 's/%/%25/g; s/\n/%0A/g; s/\r/%0D/g')
+          echo "response=$response_escaped" >> $GITHUB_OUTPUT
+
+      # Step 4: Extract fix commands from API response
       - name: Extract Fix
         id: extract
         if: steps.autofix.outputs.response != ''
         run: |
-          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Getting json of the fix and converting into actionable script..." | tee -a test.log
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Parsing fix steps from API response..." | tee -a test.log
           fix_commands=$(echo '${{ steps.autofix.outputs.response }}' | jq -r '.fix_steps[]?')
+
           if [ -z "$fix_commands" ]; then
             echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] No fix steps provided." | tee -a test.log
             exit 1
@@ -66,7 +73,8 @@ jobs:
             echo "$fix_commands" | sed 's/^/echo Running: & \n&/' > fix.sh
             chmod +x fix.sh
           fi
-          
+
+      # Step 5: Execute fix commands
       - name: Execute Fix
         if: steps.extract.outcome == 'success'
         run: |
