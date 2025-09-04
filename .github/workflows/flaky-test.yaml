@@ -13,10 +13,8 @@ jobs:
         run: |
           set +e
           if [ $((RANDOM % 2)) -eq 0 ]; then
-            # scenarios=("AUTH401","BLD001","CLSTR01","COMP001","DBCNX01","DBTIME1","DISK100","DNS0001","FILE404","FLAKY001","DEP404","NETFAIL1","NULL500","PODFAIL","TESTF01","TIMEOUT01","Timeout01")
-            # RANDOM_SCENARIO=${scenarios[$((RANDOM % ${#scenarios[@]}))]}
-            # echo "2024-06-01T10:00:00Z [ERROR] Test failed with scenario: $RANDOM_SCENARIO" > test.log
-            # "SCENARIO=$RANDOM_SCENARIO"  >> $GITHUB_OUTPUT
+            echo "2024-06-01T10:00:00Z [ERROR] Test failed randomly" > test.log
+            echo "failed=true" >> $GITHUB_OUTPUT
             exit 1
           else
             echo "Test passed!"
@@ -33,34 +31,43 @@ jobs:
           pip install -e .
           export PATH="$HOME/.local/bin:$PATH"
           OUTPUT=$(autoheal-agent --mode suggest test.log)
-          echo $OUTPUT
+          echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "No local fix applied"; then
             echo "failed=false" >> $GITHUB_OUTPUT
           else
             echo "failed=true" >> $GITHUB_OUTPUT
           fi
           
-      - name: send logs to autofix api and apply fix
+      - name: Send logs to Autofix API
+        id: autofix
         if: steps.autoheal.outputs.failed == 'true'
         run: |
           log_content=$(cat test.log)
-          response=$(curl -s -x post "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
-            -h "content-type: application/json" \
+          response=$(curl -s -X POST "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
+            -H "Content-Type: application/json" \
             -d "{\"log\": \"$log_content\"}")
           echo "autofix api response: $response"
+          # save entire JSON for later steps
+          echo "response=$response" >> $GITHUB_OUTPUT
 
-      #- name: Send email notification (on failure)
-      #  if: steps.flaky.outputs.failed == 'true'
-      #  uses: dawidd6/action-send-mail@v3
-      #  with:
-      #    server_address: smtp.gmail.com
-      #    server_port: 465
-      #    username: ${{ secrets.EMAIL_USERNAME }}
-      #    password: ${{ secrets.EMAIL_PASSWORD }}
-      #    subject: "AutoFix Triggered for CI/CD Failure"
-      #    to: ${{ secrets.EMAIL_TO }}
-      #    from: ${{ secrets.EMAIL_USERNAME }}
-      #   body: |
-      #      The CI/CD job failed and AutoFix was triggered.
-      #     Log:
-      #      $(cat test.log)
+      - name: Extract Fix
+        id: extract
+        if: steps.autofix.outputs.response != ''
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Getting json of the fix and converting into actionable script..." | tee -a test.log
+          fix_commands=$(echo '${{ steps.autofix.outputs.response }}' | jq -r '.fix_steps[]?')
+          if [ -z "$fix_commands" ]; then
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] No fix steps provided." | tee -a test.log
+            exit 1
+          else
+            echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix steps received: $fix_commands" | tee -a test.log
+            echo "$fix_commands" | sed 's/^/echo Running: & \n&/' > fix.sh
+            chmod +x fix.sh
+          fi
+          
+      - name: Execute Fix
+        if: steps.extract.outcome == 'success'
+        run: |
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Executing fix script..." | tee -a test.log
+          ./fix.sh || { echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [ERROR] Fix script execution failed." | tee -a test.log; exit 1; }
+          echo "$(date -u +'%Y-%m-%dT%H:%M:%SZ') [INFO] Fix script executed successfully." | tee -a test.log
