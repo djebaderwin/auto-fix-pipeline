@@ -33,11 +33,13 @@ jobs:
           OUTPUT=$(autoheal-agent --mode suggest test.log)
           echo "$OUTPUT"
           if echo "$OUTPUT" | grep -q "No local fix applied"; then
-            echo "failed=false" >> $GITHUB_OUTPUT
-          else
             echo "failed=true" >> $GITHUB_OUTPUT
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
           fi
-          
+        shell: bash
+        outputs:
+          failed: ${{ steps.autoheal.outputs.failed }}
       - name: Send logs to Autofix API
         id: autofix
         if: steps.autoheal.outputs.failed == 'true'
