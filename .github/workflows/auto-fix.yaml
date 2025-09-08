@@ -47,7 +47,7 @@ jobs:
         id: autofix
         if: steps.autoheal.outputs.failed == 'true'
         run: |
-          response= '{"fix_steps": ["echo Restarting services..", "echo Services started.."]}'
+          response='{"fix_steps": ["echo Restarting services..", "echo Services started.."]}'
           echo "autofix api response: $response"
 
           # escape JSON for GitHub outputs
