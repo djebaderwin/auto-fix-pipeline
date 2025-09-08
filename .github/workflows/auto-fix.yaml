@@ -47,10 +47,7 @@ jobs:
         id: autofix
         if: steps.autoheal.outputs.failed == 'true'
         run: |
-          log_content=$(cat test.log)
-          response=$(curl -s -X POST "https://oyd1eb7q57.execute-api.us-east-1.amazonaws.com" \
-            -H "Content-Type: application/json" \
-            -d "{\"log\": \"$log_content\"}")
+          reponse= '{"fix_steps": ["echo Restarting services..", "echo Services started.."]}'
           echo "autofix api response: $response"
 
           # escape JSON for GitHub outputs
